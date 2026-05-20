@@ -31,6 +31,21 @@
   <body>
     <h1>Instagram Comment Viewer</h1>
 
+    <details class="card" style="margin-bottom:10px">
+      <summary style="cursor:pointer;font-weight:600">How to get the cURL command</summary>
+      <ol style="margin-top:10px;padding-left:20px;line-height:1.8">
+        <li>Open the Instagram post URL in your browser</li>
+        <li>Right-click on the page and choose <strong>Inspect</strong></li>
+        <li>Open the <strong>Network</strong> tab (at the top of DevTools)</li>
+        <li>Type <strong>graphql</strong> in the Network filter box</li>
+        <li>Reload the page, then click the 🚫 icon to <strong>clear</strong> the network log</li>
+        <li>Scroll down on the post until new comments auto-load</li>
+        <li>A new API call will appear in the Network tab — <strong>right-click</strong> on it</li>
+        <li>Choose <strong>Copy</strong> → <strong>Copy as cURL</strong></li>
+        <li>Paste the result below</li>
+      </ol>
+    </details>
+
     <div class="card">
       <label for="curl-input">Paste cURL command from Instagram post</label>
       <textarea id="curl-input" placeholder="curl 'https://www.instagram.com/api/graphql' ..."></textarea>

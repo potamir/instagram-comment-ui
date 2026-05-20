@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Instagram Comment Viewer</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafafa; color: #333; padding: 20px; max-width: 1200px; margin: 0 auto; }
+      h1 { font-size: 1.5rem; margin-bottom: 16px; }
+      .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+      label { font-weight: 600; display: block; margin-bottom: 6px; }
+      textarea { width: 100%; height: 120px; font-family: monospace; font-size: 0.8rem; padding: 10px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; }
+      button { margin-top: 10px; padding: 10px 24px; background: #0095f6; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; font-weight: 600; }
+      button:disabled { background: #ccc; cursor: not-allowed; }
+      .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+      .filters input, .filters select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.85rem; }
+      .filters input { flex: 1; min-width: 150px; }
+      .stats { font-size: 0.85rem; color: #666; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+      thead th { position: sticky; top: 0; background: #f0f0f0; padding: 10px 8px; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer; user-select: none; white-space: nowrap; }
+      thead th:hover { background: #e0e0e0; }
+      tbody tr:nth-child(even) { background: #fafafa; }
+      tbody td { padding: 8px; border-bottom: 1px solid #eee; max-width: 400px; word-wrap: break-word; }
+      .error { color: #d32f2f; background: #fdd; padding: 10px; border-radius: 6px; margin-bottom: 16px; }
+      .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .table-wrap { max-height: 70vh; overflow: auto; border: 1px solid #ddd; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Instagram Comment Viewer</h1>
+
+    <div class="card">
+      <label for="curl-input">Paste cURL command from Instagram post</label>
+      <textarea id="curl-input" placeholder="curl 'https://www.instagram.com/api/graphql' ..."></textarea>
+      <button id="fetch-btn" onclick="fetchComments()">Fetch Comments</button>
+    </div>
+
+    <div id="error-box" class="error" style="display:none"></div>
+
+    <div id="results" style="display:none">
+      <div class="filters">
+        <input type="text" id="filter-text" placeholder="Filter by comment text..." oninput="renderTable()" />
+        <input type="text" id="filter-user" placeholder="Filter by username..." oninput="renderTable()" />
+        <input type="number" id="filter-likes-min" placeholder="Min likes" style="max-width:100px" oninput="renderTable()" />
+        <select id="sort-by" onchange="renderTable()">
+          <option value="timestamp-desc">Newest first</option>
+          <option value="timestamp-asc">Oldest first</option>
+          <option value="like_count-desc">Most liked</option>
+          <option value="like_count-asc">Least liked</option>
+          <option value="username-asc">Username A-Z</option>
+        </select>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Username</th>
+              <th>Comment</th>
+              <th>Likes</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "https://instagram-comment-api.onrender.com";
+
+      let allComments = [];
+      let mediaId = "";
+      let shortcode = "";
+
+      async function fetchComments() {
+        const curlStr = document.getElementById("curl-input").value.trim();
+        if (!curlStr) return;
+
+        const btn = document.getElementById("fetch-btn");
+        const errBox = document.getElementById("error-box");
+        errBox.style.display = "none";
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Fetching (this may take a while)...';
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 600000);
+
+        try {
+          const res = await fetch(API_URL + "/fetch-comments", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "curl=" + encodeURIComponent(curlStr),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          const data = await res.json();
+
+          if (data.error) {
+            errBox.textContent = data.error;
+            errBox.style.display = "block";
+            return;
+          }
+
+          allComments = data.comments || [];
+          mediaId = data.media_id;
+          shortcode = data.shortcode;
+          document.getElementById("results").style.display = "block";
+          renderTable();
+        } catch (e) {
+          errBox.textContent = "Request failed: " + e.message;
+          errBox.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Fetch Comments";
+        }
+      }
+
+      function getFiltered() {
+        const textFilter = document.getElementById("filter-text").value.toLowerCase();
+        const userFilter = document.getElementById("filter-user").value.toLowerCase();
+        const likesMin = parseInt(document.getElementById("filter-likes-min").value) || 0;
+        const sortBy = document.getElementById("sort-by").value;
+
+        let filtered = allComments.filter(c => {
+          if (textFilter && !(c.text || "").toLowerCase().includes(textFilter)) return false;
+          if (userFilter && !(c.username || "").toLowerCase().includes(userFilter)) return false;
+          if ((c.like_count || 0) < likesMin) return false;
+          return true;
+        });
+
+        const [key, dir] = sortBy.split("-");
+        filtered.sort((a, b) => {
+          let va = a[key] || 0;
+          let vb = b[key] || 0;
+          if (typeof va === "string") { va = va.toLowerCase(); vb = (vb || "").toLowerCase(); }
+          if (va < vb) return dir === "asc" ? -1 : 1;
+          if (va > vb) return dir === "asc" ? 1 : -1;
+          return 0;
+        });
+
+        return filtered;
+      }
+
+      function renderTable() {
+        const rows = getFiltered();
+        const tbody = document.getElementById("tbody");
+        document.getElementById("stats").textContent =
+          `Showing ${rows.length} of ${allComments.length} comments | media_id: ${mediaId} | shortcode: ${shortcode}`;
+        tbody.innerHTML = rows.map((c, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td><strong>${escapeHtml(c.username || "")}</strong></td>
+            <td>${escapeHtml(c.text || "")}</td>
+            <td>${c.like_count || 0}</td>
+            <td>${c.timestamp ? new Date(c.timestamp * 1000).toLocaleString() : "-"}</td>
+          </tr>
+        `).join("");
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str;
+        return div.innerHTML;
+      }
+    </script>
+  </body>
+</html>

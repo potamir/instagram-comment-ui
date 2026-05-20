@@ -13,13 +13,13 @@
       textarea { width: 100%; height: 120px; font-family: monospace; font-size: 0.8rem; padding: 10px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; }
       button { margin-top: 10px; padding: 10px 24px; background: #0095f6; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; font-weight: 600; }
       button:disabled { background: #ccc; cursor: not-allowed; }
+      #stop-btn { background: #d32f2f; margin-left: 8px; display: none; }
       .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
       .filters input, .filters select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.85rem; }
       .filters input { flex: 1; min-width: 150px; }
       .stats { font-size: 0.85rem; color: #666; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-      thead th { position: sticky; top: 0; background: #f0f0f0; padding: 10px 8px; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer; user-select: none; white-space: nowrap; }
-      thead th:hover { background: #e0e0e0; }
+      thead th { position: sticky; top: 0; background: #f0f0f0; padding: 10px 8px; text-align: left; border-bottom: 2px solid #ddd; white-space: nowrap; }
       tbody tr:nth-child(even) { background: #fafafa; }
       tbody td { padding: 8px; border-bottom: 1px solid #eee; max-width: 400px; word-wrap: break-word; }
       .error { color: #d32f2f; background: #fdd; padding: 10px; border-radius: 6px; margin-bottom: 16px; }
@@ -34,7 +34,10 @@
     <div class="card">
       <label for="curl-input">Paste cURL command from Instagram post</label>
       <textarea id="curl-input" placeholder="curl 'https://www.instagram.com/api/graphql' ..."></textarea>
-      <button id="fetch-btn" onclick="fetchComments()">Fetch Comments</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button id="fetch-btn" onclick="startFetch()">Fetch Comments</button>
+        <button id="stop-btn" onclick="stopFetch()">Stop</button>
+      </div>
     </div>
 
     <div id="error-box" class="error" style="display:none"></div>
@@ -71,52 +74,72 @@
 
     <script>
       const API_URL = "https://instagram-comment-api.onrender.com";
-
       let allComments = [];
       let mediaId = "";
       let shortcode = "";
+      let stopped = false;
 
-      async function fetchComments() {
+      async function startFetch() {
         const curlStr = document.getElementById("curl-input").value.trim();
         if (!curlStr) return;
 
         const btn = document.getElementById("fetch-btn");
+        const stopBtn = document.getElementById("stop-btn");
         const errBox = document.getElementById("error-box");
         errBox.style.display = "none";
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Fetching (this may take a while)...';
+        stopBtn.style.display = "inline-block";
+        stopped = false;
+        allComments = [];
+        mediaId = "";
+        shortcode = "";
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 600000);
+        document.getElementById("results").style.display = "block";
+
+        let cursor = null;
+        let page = 0;
 
         try {
-          const res = await fetch(API_URL + "/fetch-comments", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: "curl=" + encodeURIComponent(curlStr),
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          const data = await res.json();
+          while (!stopped) {
+            btn.innerHTML = `<span class="spinner"></span> Page ${page + 1} (${allComments.length} comments)...`;
 
-          if (data.error) {
-            errBox.textContent = data.error;
-            errBox.style.display = "block";
-            return;
+            const body = new URLSearchParams({ curl: curlStr });
+            if (cursor) body.set("cursor", cursor);
+
+            const res = await fetch(API_URL + "/fetch-comments", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: body.toString(),
+            });
+            const data = await res.json();
+
+            if (data.error) {
+              errBox.textContent = data.error;
+              errBox.style.display = "block";
+              break;
+            }
+
+            allComments = allComments.concat(data.comments || []);
+            mediaId = data.media_id || mediaId;
+            shortcode = data.shortcode || shortcode;
+            page++;
+            renderTable();
+
+            if (!data.has_next_page || !data.end_cursor) break;
+            cursor = data.end_cursor;
           }
-
-          allComments = data.comments || [];
-          mediaId = data.media_id;
-          shortcode = data.shortcode;
-          document.getElementById("results").style.display = "block";
-          renderTable();
         } catch (e) {
           errBox.textContent = "Request failed: " + e.message;
           errBox.style.display = "block";
         } finally {
           btn.disabled = false;
-          btn.textContent = "Fetch Comments";
+          btn.innerHTML = "Fetch Comments";
+          stopBtn.style.display = "none";
         }
+      }
+
+      function stopFetch() {
+        stopped = true;
       }
 
       function getFiltered() {

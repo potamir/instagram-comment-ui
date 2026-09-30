@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Instagram Comment Viewer</title>
+    <title>Instagram Followers Viewer</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafafa; color: #333; padding: 20px; max-width: 1200px; margin: 0 auto; }
@@ -21,54 +21,69 @@
       table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
       thead th { position: sticky; top: 0; background: #f0f0f0; padding: 10px 8px; text-align: left; border-bottom: 2px solid #ddd; white-space: nowrap; }
       tbody tr:nth-child(even) { background: #fafafa; }
-      tbody td { padding: 8px; border-bottom: 1px solid #eee; max-width: 400px; word-wrap: break-word; }
+      tbody td { padding: 8px; border-bottom: 1px solid #eee; max-width: 300px; word-wrap: break-word; vertical-align: middle; }
       .error { color: #d32f2f; background: #fdd; padding: 10px; border-radius: 6px; margin-bottom: 16px; }
       .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
       @keyframes spin { to { transform: rotate(360deg); } }
       .table-wrap { max-height: 70vh; overflow: auto; border: 1px solid #ddd; border-radius: 6px; }
+      .avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: block; }
+      .user-cell { display: flex; align-items: center; gap: 10px; }
+      .user-cell a { color: #333; text-decoration: none; font-weight: 600; }
+      .user-cell a:hover { text-decoration: underline; }
+      .verified { color: #0095f6; font-size: 0.75rem; margin-left: 2px; }
+      .private { color: #999; font-size: 0.75rem; margin-left: 2px; }
+      .badge { display: inline-block; font-size: 0.7rem; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+      .badge-verified { background: #e0f0ff; color: #0095f6; }
+      .badge-private { background: #eee; color: #666; }
+      .progress-bar { background: #e0e0e0; border-radius: 4px; height: 6px; margin: 8px 0; overflow: hidden; }
+      .progress-fill { background: #0095f6; height: 100%; transition: width 0.3s; }
+      .status { background: #fff8e1; border: 1px solid #ffe082; color: #8a6d00; padding: 10px; border-radius: 6px; margin-bottom: 16px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
+      .status .spinner { border-color: #8a6d00; border-top-color: transparent; }
     </style>
   </head>
   <body>
-    <h1>Instagram Comment Viewer</h1>
+    <h1>Instagram Followers Viewer</h1>
 
     <details class="card" style="margin-bottom:10px">
       <summary style="cursor:pointer;font-weight:600">How to get the cURL command</summary>
       <ol style="margin-top:10px;padding-left:20px;line-height:1.8">
-        <li>Open the Instagram post URL in your browser</li>
-        <li>Right-click on the page and choose <strong>Inspect</strong></li>
-        <li>Open the <strong>Network</strong> tab (at the top of DevTools)</li>
-        <li>Type <strong>graphql</strong> in the Network filter box</li>
-        <li>Reload the page, then click the 🚫 icon to <strong>clear</strong> the network log</li>
-        <li>Scroll down on the post until new comments auto-load</li>
-        <li>A new API call will appear in the Network tab — <strong>right-click</strong> on it</li>
+        <li>Open the Instagram profile page in your browser (e.g. <code>https://www.instagram.com/username/</code>)</li>
+        <li>Right-click and choose <strong>Inspect</strong></li>
+        <li>Open the <strong>Network</strong> tab</li>
+        <li>Type <strong>followers</strong> in the Network filter box</li>
+        <li>Click the <strong>Followers</strong> button on the profile</li>
+        <li>A request to <code>/api/v1/friendships/&hellip;/followers/</code> will appear — <strong>right-click</strong> it</li>
         <li>Choose <strong>Copy</strong> → <strong>Copy as cURL</strong></li>
         <li>Paste the result below</li>
       </ol>
     </details>
 
     <div class="card">
-      <label for="curl-input">Paste cURL command from Instagram post</label>
-      <textarea id="curl-input" placeholder="curl 'https://www.instagram.com/api/graphql' ..."></textarea>
+      <label for="curl-input">Paste cURL command from Instagram profile</label>
+      <textarea id="curl-input" placeholder="curl 'https://www.instagram.com/api/v1/friendships/.../followers/' ..."></textarea>
       <div style="display:flex;align-items:center;gap:10px">
-        <button id="fetch-btn" onclick="startFetch()">Fetch Comments</button>
+        <button id="fetch-btn" onclick="startFetch()">Fetch Followers</button>
         <button id="stop-btn" onclick="stopFetch()">Stop</button>
       </div>
     </div>
 
     <div id="error-box" class="error" style="display:none"></div>
+    <div id="status-box" class="status" style="display:none"></div>
 
     <div id="results" style="display:none">
       <div class="filters">
-        <input type="text" id="filter-text" placeholder="Filter by comment text..." oninput="renderTable()" />
         <input type="text" id="filter-user" placeholder="Filter by username..." oninput="renderTable()" />
-        <input type="number" id="filter-likes-min" placeholder="Min likes" style="max-width:100px" oninput="renderTable()" />
+        <input type="text" id="filter-name" placeholder="Filter by full name..." oninput="renderTable()" />
         <select id="sort-by" onchange="renderTable()">
-          <option value="timestamp-desc">Newest first</option>
-          <option value="timestamp-asc">Oldest first</option>
-          <option value="like_count-desc">Most liked</option>
-          <option value="like_count-asc">Least liked</option>
           <option value="username-asc">Username A-Z</option>
+          <option value="username-desc">Username Z-A</option>
         </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer">
+          <input type="checkbox" id="hide-private" onchange="renderTable()" /> Hide private
+        </label>
+      </div>
+      <div class="progress-bar" id="progress-bar-wrap" style="display:none">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
       </div>
       <div class="stats" id="stats"></div>
       <div class="table-wrap">
@@ -76,10 +91,8 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Username</th>
-              <th>Comment</th>
-              <th>Likes</th>
-              <th>Timestamp</th>
+              <th>User</th>
+              <th>Full Name</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -88,11 +101,74 @@
     </div>
 
     <script>
-      const API_URL = "https://instagram-comment-api.onrender.com";
-      let allComments = [];
-      let mediaId = "";
-      let shortcode = "";
+      const API_URL = "http://localhost:5112";
+      const REQUEST_TIMEOUT_MS = 25000;
+      const MAX_WAKE_ATTEMPTS = 12;
+      const RETRY_WAIT_MS = 15000;
+      let allFollowers = [];
+      let userId = "";
+      let profileUsername = "";
       let stopped = false;
+
+      function setStatus(html) {
+        const box = document.getElementById("status-box");
+        if (!html) {
+          box.style.display = "none";
+          box.innerHTML = "";
+          return;
+        }
+        box.innerHTML = html;
+        box.style.display = "flex";
+      }
+
+      function sleepInterruptible(ms, onTick) {
+        return new Promise((resolve, reject) => {
+          const step = 500;
+          let elapsed = 0;
+          const id = setInterval(() => {
+            if (stopped) { clearInterval(id); reject(new Error("__stopped__")); return; }
+            elapsed += step;
+            if (onTick) onTick(Math.max(0, ms - elapsed));
+            if (elapsed >= ms) { clearInterval(id); resolve(); }
+          }, step);
+        });
+      }
+
+      async function fetchPage(body) {
+        let lastErr;
+        for (let attempt = 1; attempt <= MAX_WAKE_ATTEMPTS; attempt++) {
+          if (stopped) throw new Error("__stopped__");
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+            let res;
+            try {
+              res = await fetch(API_URL + "/fetch-followers", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: body.toString(),
+                signal: controller.signal,
+              });
+            } finally {
+              clearTimeout(timeout);
+            }
+            setStatus("");
+            return await res.json();
+          } catch (e) {
+            lastErr = e;
+            if (stopped) throw new Error("__stopped__");
+            if (attempt >= MAX_WAKE_ATTEMPTS) break;
+            await sleepInterruptible(RETRY_WAIT_MS, (left) => {
+              setStatus(
+                `<span class="spinner"></span> Server waking up… ` +
+                `retry ${attempt + 1} of ${MAX_WAKE_ATTEMPTS} in ${Math.ceil(left / 1000)}s` +
+                ` <em style="font-style:normal;opacity:.7">(free server needs ~1-2 min to boot)</em>`
+              );
+            });
+          }
+        }
+        throw lastErr;
+      }
 
       async function startFetch() {
         const curlStr = document.getElementById("curl-input").value.trim();
@@ -101,37 +177,31 @@
         const btn = document.getElementById("fetch-btn");
         const stopBtn = document.getElementById("stop-btn");
         const errBox = document.getElementById("error-box");
+        const progressWrap = document.getElementById("progress-bar-wrap");
+        const progressFill = document.getElementById("progress-fill");
         errBox.style.display = "none";
+        setStatus("");
         btn.disabled = true;
         stopBtn.style.display = "inline-block";
         stopped = false;
-        allComments = [];
-        mediaId = "";
-        shortcode = "";
+        allFollowers = [];
+        userId = "";
+        profileUsername = "";
 
         document.getElementById("results").style.display = "block";
 
-        let cursor = null;
+        let nextMaxId = null;
         let page = 0;
+        let totalFetched = 0;
 
         try {
           while (!stopped) {
-            btn.innerHTML = `<span class="spinner"></span> Page ${page + 1} (${allComments.length} comments)...`;
+            btn.innerHTML = `<span class="spinner"></span> Page ${page + 1} (${allFollowers.length} followers)...`;
 
             const body = new URLSearchParams({ curl: curlStr });
-            if (cursor) body.set("cursor", cursor);
+            if (nextMaxId) body.set("next_max_id", nextMaxId);
 
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 25000);
-
-            const res = await fetch(API_URL + "/fetch-comments", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: body.toString(),
-              signal: controller.signal,
-            });
-            clearTimeout(timeout);
-            const data = await res.json();
+            const data = await fetchPage(body);
 
             if (data.error) {
               errBox.textContent = data.error;
@@ -139,23 +209,31 @@
               break;
             }
 
-            allComments = allComments.concat(data.comments || []);
-            mediaId = data.media_id || mediaId;
-            shortcode = data.shortcode || shortcode;
+            allFollowers = allFollowers.concat(data.followers || []);
+            totalFetched += (data.followers || []).length;
+            userId = data.user_id || userId;
+            profileUsername = data.username || profileUsername;
             page++;
             renderTable();
 
-            if (!data.has_next_page || !data.end_cursor) break;
-            cursor = data.end_cursor;
+            progressWrap.style.display = "block";
+            progressFill.style.width = Math.min(100, page * 8) + "%";
+
+            if (!data.has_more || !data.next_max_id) break;
+            nextMaxId = data.next_max_id;
             await new Promise(r => setTimeout(r, 1000));
           }
         } catch (e) {
-          errBox.textContent = "Request failed: " + e.message;
-          errBox.style.display = "block";
+          if (e.message !== "__stopped__") {
+            errBox.textContent = "Request failed after retries: " + e.message;
+            errBox.style.display = "block";
+          }
         } finally {
+          setStatus("");
           btn.disabled = false;
-          btn.innerHTML = "Fetch Comments";
+          btn.innerHTML = "Fetch Followers";
           stopBtn.style.display = "none";
+          progressFill.style.width = "100%";
         }
       }
 
@@ -164,23 +242,22 @@
       }
 
       function getFiltered() {
-        const textFilter = document.getElementById("filter-text").value.toLowerCase();
         const userFilter = document.getElementById("filter-user").value.toLowerCase();
-        const likesMin = parseInt(document.getElementById("filter-likes-min").value) || 0;
+        const nameFilter = document.getElementById("filter-name").value.toLowerCase();
+        const hidePrivate = document.getElementById("hide-private").checked;
         const sortBy = document.getElementById("sort-by").value;
 
-        let filtered = allComments.filter(c => {
-          if (textFilter && !(c.text || "").toLowerCase().includes(textFilter)) return false;
-          if (userFilter && !(c.username || "").toLowerCase().includes(userFilter)) return false;
-          if ((c.like_count || 0) < likesMin) return false;
+        let filtered = allFollowers.filter(f => {
+          if (userFilter && !(f.username || "").toLowerCase().includes(userFilter)) return false;
+          if (nameFilter && !(f.full_name || "").toLowerCase().includes(nameFilter)) return false;
+          if (hidePrivate && f.is_private) return false;
           return true;
         });
 
         const [key, dir] = sortBy.split("-");
         filtered.sort((a, b) => {
-          let va = a[key] || 0;
-          let vb = b[key] || 0;
-          if (typeof va === "string") { va = va.toLowerCase(); vb = (vb || "").toLowerCase(); }
+          let va = (a[key] || "").toLowerCase();
+          let vb = (b[key] || "").toLowerCase();
           if (va < vb) return dir === "asc" ? -1 : 1;
           if (va > vb) return dir === "asc" ? 1 : -1;
           return 0;
@@ -193,14 +270,23 @@
         const rows = getFiltered();
         const tbody = document.getElementById("tbody");
         document.getElementById("stats").textContent =
-          `Showing ${rows.length} of ${allComments.length} comments | media_id: ${mediaId} | shortcode: ${shortcode}`;
-        tbody.innerHTML = rows.map((c, i) => `
+          `Showing ${rows.length} of ${allFollowers.length} followers`;
+        tbody.innerHTML = rows.map((f, i) => `
           <tr>
             <td>${i + 1}</td>
-            <td><strong>${escapeHtml(c.username || "")}</strong></td>
-            <td>${escapeHtml(c.text || "")}</td>
-            <td>${c.like_count || 0}</td>
-            <td>${c.timestamp ? new Date(c.timestamp * 1000).toLocaleString() : "-"}</td>
+            <td>
+              <div class="user-cell">
+                <img class="avatar" src="${escapeHtml(f.profile_pic_url || "")}"
+                     alt="${escapeHtml(f.username)}"
+                     onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2236%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2236%22/></svg>'">
+                <a href="https://instagram.com/${escapeHtml(f.username)}" target="_blank">
+                  ${escapeHtml(f.username)}
+                </a>
+                ${f.is_verified ? '<span class="badge badge-verified">✓</span>' : ""}
+                ${f.is_private ? '<span class="badge badge-private">🔒</span>' : ""}
+              </div>
+            </td>
+            <td>${escapeHtml(f.full_name || "")}</td>
           </tr>
         `).join("");
       }
